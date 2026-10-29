@@ -1,0 +1,35 @@
+name: Inspect ZN-M2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Clone upstream OpenWrt
+      run: git clone --depth 1 https://github.com/openwrt/openwrt.git openwrt
+
+    - name: Inspect
+      run: |
+        cd openwrt
+        echo "===== 1. zn_m2 / zn,m2 出现位置 ====="
+        grep -rn "zn_m2\|zn,m2" target/linux/qualcommax || echo "NOT FOUND"
+
+        echo
+        echo "===== 2. 设备块 ====="
+        sed -n '/^define Device\/zn_m2$/,/^endef$/p' target/linux/qualcommax/image/ipq60xx.mk
+
+        echo
+        echo "===== 3. 找到的 dts 文件 ====="
+        DTS=$(grep -rl 'zn,m2' target/linux/qualcommax --include=*.dts | head -1)
+        echo "$DTS"
+        [ -n "$DTS" ] && cat "$DTS"
+
+        echo
+        echo "===== 4. memory 节点 ====="
+        grep -rn "memory@" target/linux/qualcommax/dts/ipq6018*.dtsi "$DTS" || true
+
+        echo
+        echo "===== 5. ipq60xx 默认包 ====="
+        cat target/linux/qualcommax/ipq60xx/target.mk
