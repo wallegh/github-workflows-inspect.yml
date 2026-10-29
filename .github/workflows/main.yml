@@ -9,43 +9,51 @@ jobs:
     steps:
     - name: Scan trees
       run: |
+        set +e
         scan() {
           NAME="$1"; URL="$2"
           echo; echo "################ $NAME ################"
-          rm -rf t && git clone --depth 1 "$URL" t 2>&1 | tail -2 || { echo "CLONE FAILED"; return; }
+          rm -rf t
+          git clone --depth 1 "$URL" t 2>&1 | tail -2
+          [ -d t ] || { echo "CLONE FAILED"; return; }
           cd t
           echo "branch: $(git rev-parse --abbrev-ref HEAD)  commit: $(git log -1 --format='%h %ad' --date=short)"
 
-          echo "--- 1. 出现位置 ---"
-          grep -rniE "zn[_,-]?m2" target/linux/qualcommax 2>/dev/null | head -20 || true
-          [ -z "$(grep -rliE 'zn[_,-]?m2' target/linux/qualcommax 2>/dev/null)" ] && echo "NOT FOUND"
+          echo "--- 1. 全仓库内容匹配 ---"
+          grep -rniE "zn[_,-]?m2" target package 2>/dev/null | head -30
+          echo "--- 1b. 文件名含 zn 的 dts/mk ---"
+          find target -iname "*zn*" 2>/dev/null | head -20
 
           echo "--- 2. 设备块 ---"
-          MK=$(grep -rl "define Device/zn_m2" target/linux/qualcommax 2>/dev/null | head -1)
+          MK=$(grep -rlE "define Device/.*zn.?m2" target/linux 2>/dev/null | head -1)
           echo "mk file: $MK"
-          [ -n "$MK" ] && sed -n '/^define Device\/zn_m2$/,/^endef$/p' "$MK"
+          if [ -n "$MK" ]; then
+            sed -n '/^define Device\/.*zn.*m2/,/^endef/p' "$MK"
+          fi
 
-          echo "--- 3. dts 文件头部与 memory 节点 ---"
-          DTS=$(grep -rlE 'zn,m2' target/linux/qualcommax --include=*.dts 2>/dev/null | head -1)
+          echo "--- 3. dts 头部与 memory 节点 ---"
+          DTS=$(grep -rlE 'zn,m2|zn-m2|zn_m2' target/linux --include=*.dts 2>/dev/null | head -1)
+          [ -z "$DTS" ] && DTS=$(find target -iname "*zn*m2*.dts" | head -1)
           echo "dts: $DTS"
           if [ -n "$DTS" ]; then
-            head -n 40 "$DTS"
+            head -n 50 "$DTS"
             echo "... memory 相关:"
             grep -n -B1 -A4 "memory" "$DTS" || echo "(dts 内无 memory 节点)"
           fi
-          echo "--- 4. dtsi 里的 memory 节点 ---"
-          grep -rn -A4 "memory@" target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq6018*.dtsi target/linux/qualcommax/dts/ipq6018*.dtsi 2>/dev/null | head -20
+
+          echo "--- 4. dtsi memory 节点 ---"
+          grep -rn -A4 "memory@" $(find target/linux/qualcommax -name "ipq6018*.dtsi") 2>/dev/null | head -20
 
           echo "--- 5. ipq60xx target.mk ---"
           cat target/linux/qualcommax/ipq60xx/target.mk 2>/dev/null
 
           echo "--- 6. NSS 相关 ---"
-          ls package/ 2>/dev/null | grep -i nss | head
-          ls feeds.conf.default >/dev/null 2>&1 && grep -i nss feeds.conf.default
+          ls package 2>/dev/null | grep -i nss | head
+          grep -i nss feeds.conf.default
           grep -rl "qca-nss" target/linux/qualcommax/ipq60xx 2>/dev/null | head -3
           cd ..
         }
 
-        scan "immortalwrt official" https://github.com/immortalwrt/immortalwrt.git
-        scan "VIKINGYFY"            https://github.com/VIKINGYFY/immortalwrt.git
-        scan "qosmio"               https://github.com/qosmio/openwrt-ipq.git
+        scan "VIKINGYFY" https://github.com/VIKINGYFY/immortalwrt.git
+        scan "qosmio"    https://github.com/qosmio/openwrt-ipq.git
+        exit 0
